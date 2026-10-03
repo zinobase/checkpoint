@@ -1,0 +1,24 @@
+{
+  "name": "checkpoint",
+  "private": false,
+  "version": "1.0.0",
+  "description": "Zero-knowledge perimeter gate verification and anonymous credential clearance on Midnight.",
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.20.0"
+  },
+  "scripts": {
+    "test": "vitest run tests/contract/checkpoint.test.ts tests/domain/gate.test.ts tests/domain/membership.test.ts",
+    "typecheck": "tsc --noEmit --target es2022 --module esnext --moduleResolution bundler --skipLibCheck --lib es2022,dom,dom.iterable web/src/main.ts",
+    "demo": "tsx scripts/demo.ts",
+    "dev": "vite web",
+    "build": "vite build web",
+    "build:web": "vite build web"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vite": "^5.4.0",
+    "vite-plugin-wasm": "^3.6.0",
+    "vitest": "^1.5.0",
+    "tsx": "^4.19.0"
+  }
+}
