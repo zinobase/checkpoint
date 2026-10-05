@@ -1,0 +1,71 @@
+{
+  "manifest-version": "1",
+  "compiler-version": "0.35.0",
+  "compiler-commit": "debb05f9414b9d1e176741c2be289bb32233f0fc",
+  "language-version": "0.27.0",
+  "runtime-version": "0.20.0",
+  "compiler": {
+    "type": "directory",
+    "contract-info.json": {
+      "type": "file",
+      "size": 16554,
+      "hash": "de723583781150f709838c828f4c3ae259289abdc886e247c279808bcc22d83a"
+    }
+  },
+  "contract": {
+    "type": "directory",
+    "index.d.ts": {
+      "type": "file",
+      "size": 9216,
+      "hash": "a2dde9a3455a51c00d3d24fab47c11be83a894b22d080265796c51365d26c742"
+    },
+    "index.js": {
+      "type": "file",
+      "size": 167465,
+      "hash": "2918adb378113cc6040db762079365be184497bea86b0600e5bf445a6b8253a8"
+    },
+    "index.js.map": {
+      "type": "file",
+      "size": 6227,
+      "hash": "caf7384fefea5abf65d967259cd82d8d3c5755a8d5266ab72d1bdc552a539db9"
+    }
+  },
+  "zkir": {
+    "type": "directory",
+    "issueCredential.zkir": {
+      "type": "file",
+      "size": 5608,
+      "hash": "f378b6f2f122e4480639959f424776e219b7e744a708cc5369c4274531e64fe3"
+    },
+    "reactivateCredential.zkir": {
+      "type": "file",
+      "size": 3340,
+      "hash": "a6782b2ce0ad05ca508008a083cf0f3ba637b066a1d33d13e4b7ca2223ccb63e"
+    },
+    "registerGate.zkir": {
+      "type": "file",
+      "size": 7032,
+      "hash": "9dee2e36e56cbe842fb06679762c8ca94fbb52ad9027d21e9f42ef6b4d97bf28"
+    },
+    "revokeCredential.zkir": {
+      "type": "file",
+      "size": 3380,
+      "hash": "3ac7d00110ce8e782ace5f0a941af7d7cb25cbcfa61b1dbd54b105d307c4cbcf"
+    },
+    "suspendCredential.zkir": {
+      "type": "file",
+      "size": 3340,
+      "hash": "655fcc511b5b92043ce5c924a3b20043e97dbd646d701215d596e474b5f8ff2d"
+    },
+    "updateGate.zkir": {
+      "type": "file",
+      "size": 4995,
+      "hash": "a0ba00c0eddba62c9b16f7efdcbacfa0b876f0e9ed1fd0b9e0f20c887deb37da"
+    },
+    "verifyAccess.zkir": {
+      "type": "file",
+      "size": 18412,
+      "hash": "90b957d0a4829700fc88e9ad07fcc2e3118d2a7d1f5ad8a31f0d6e2a70c30e1d"
+    }
+  }
+}

@@ -1,0 +1,172 @@
+// SPDX-License-Identifier: Apache-2.0
+// Checkpoint: Private membership and access verification on Midnight.
+// Verified at the gate, invisible after.
+
+pragma language_version >= 0.23;
+
+import CompactStandardLibrary;
+
+export enum CredentialState { valid, suspended, revoked }
+
+export struct MemberCredential {
+  tier: Uint<8>;
+  joinedAt: Uint<32>;
+  expiresAt: Uint<32>;
+  orgId: Bytes<32>;
+  active: Boolean;
+  renewalCount: Uint<16>;
+}
+
+export struct GatePolicy {
+  orgId: Bytes<32>;
+  minTier: Uint<8>;
+  requireActive: Boolean;
+  checkExpiry: Boolean;
+  referenceTime: Uint<32>;
+}
+
+struct CredentialPreimage {
+  domain: Bytes<32>;
+  cred: MemberCredential;
+  holder: Bytes<32>;
+  salt: Bytes<32>;
+}
+
+// ---------------------------------------------------------------------------
+// Ledger State
+// ---------------------------------------------------------------------------
+
+export sealed ledger authority: Bytes<32>;
+export ledger members: HistoricMerkleTree<16, Bytes<32>>;
+export ledger memberCount: Counter;
+export ledger gates: Map<Bytes<32>, GatePolicy>;
+export ledger accessLog: Map<Bytes<32>, Map<Bytes<32>, Uint<32>>>;
+export ledger accessCount: Map<Bytes<32>, Counter>;
+export ledger revocations: Map<Bytes<32>, CredentialState>;
+
+// ---------------------------------------------------------------------------
+// Witnesses (Private Inputs)
+// ---------------------------------------------------------------------------
+
+witness privateKey(): Bytes<32>;
+witness heldCredential(): MemberCredential;
+witness credentialSalt(): Bytes<32>;
+witness credentialPath(commitment: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+// ---------------------------------------------------------------------------
+// Pure Circuits
+// ---------------------------------------------------------------------------
+
+export pure circuit authorityKey(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "checkpoint:org:v1"), sk]);
+}
+
+export pure circuit verifierKey(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "checkpoint:verifier:v1"), sk]);
+}
+
+export pure circuit memberKey(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "checkpoint:member:v1"), sk]);
+}
+
+export pure circuit credentialCommitment(cred: MemberCredential, holder: Bytes<32>, salt: Bytes<32>): Bytes<32> {
+  return persistentHash<CredentialPreimage>(CredentialPreimage {
+    domain: pad(32, "checkpoint:credential:v1"),
+    cred: cred,
+    holder: holder,
+    salt: salt
+  });
+}
+
+export pure circuit gatePassFor(gateId: Bytes<32>, memberSk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "checkpoint:gate-pass:v1"), gateId, memberSk]);
+}
+
+export pure circuit revocationHash(commitment: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "checkpoint:revocation:v2"), commitment]);
+}
+
+export pure circuit satisfiesGate(cred: MemberCredential, policy: GatePolicy): Boolean {
+  const orgMatch = cred.orgId == policy.orgId;
+  const tierOk = cred.tier >= policy.minTier;
+  const activeOk = !policy.requireActive || cred.active;
+  const expiryOk = !policy.checkExpiry || (cred.expiresAt > policy.referenceTime);
+  return orgMatch && tierOk && activeOk && expiryOk;
+}
+
+// ---------------------------------------------------------------------------
+// State Transition Circuits
+// ---------------------------------------------------------------------------
+
+constructor() {
+  authority = disclose(authorityKey(privateKey()));
+}
+
+export circuit issueCredential(commitment: Bytes<32>): [] {
+  assert(disclose(authorityKey(privateKey()) == authority), "Not authorized to issue");
+  members.insert(disclose(commitment));
+  memberCount.increment(1);
+}
+
+export circuit registerGate(gateId: Bytes<32>, policy: GatePolicy): [] {
+  const gId = disclose(gateId);
+  const pol = disclose(policy);
+  assert(disclose(authorityKey(privateKey()) == authority), "Not authorized to register gate");
+  assert(!gates.member(gId), "Gate already exists");
+  gates.insert(gId, pol);
+  accessLog.insert(gId, default<Map<Bytes<32>, Uint<32>>>);
+  accessCount.insert(gId, default<Counter>);
+}
+
+export circuit verifyAccess(gateId: Bytes<32>, timestamp: Uint<32>): Bytes<32> {
+  const gId = disclose(gateId);
+  const time = disclose(timestamp);
+  assert(gates.member(gId), "Unknown gate");
+  const policy = gates.lookup(gId);
+
+  const cred = heldCredential();
+  const salt = credentialSalt();
+  const sk = privateKey();
+  const commitment = credentialCommitment(cred, memberKey(sk), salt);
+  const path = credentialPath(commitment);
+
+  assert(disclose(path.leaf == commitment), "Path leaf mismatch");
+  assert(members.checkRoot(disclose(merkleTreePathRoot<16, Bytes<32>>(path))),
+         "Credential not in member tree");
+  assert(disclose(satisfiesGate(cred, policy)), "Credential does not satisfy gate policy");
+
+  const rHash = disclose(revocationHash(commitment));
+  assert(!revocations.member(rHash) || revocations.lookup(rHash) == CredentialState.valid,
+         "Credential is not valid");
+
+  const pass = disclose(gatePassFor(gId, sk));
+  accessLog.lookup(gId).insert(pass, time);
+  accessCount.lookup(gId).increment(1);
+  return pass;
+}
+
+export circuit suspendCredential(credCommitment: Bytes<32>): [] {
+  assert(disclose(authorityKey(privateKey()) == authority), "Not authorized to suspend");
+  const rHash = disclose(revocationHash(credCommitment));
+  revocations.insert(rHash, CredentialState.suspended);
+}
+
+export circuit reactivateCredential(credCommitment: Bytes<32>): [] {
+  assert(disclose(authorityKey(privateKey()) == authority), "Not authorized to reactivate");
+  const rHash = disclose(revocationHash(credCommitment));
+  revocations.insert(rHash, CredentialState.valid);
+}
+
+export circuit revokeCredential(credCommitment: Bytes<32>): [] {
+  assert(disclose(authorityKey(privateKey()) == authority), "Not authorized to revoke");
+  const rHash = disclose(revocationHash(credCommitment));
+  revocations.insert(rHash, CredentialState.revoked);
+}
+
+export circuit updateGate(gateId: Bytes<32>, policy: GatePolicy): [] {
+  const gId = disclose(gateId);
+  const pol = disclose(policy);
+  assert(disclose(authorityKey(privateKey()) == authority), "Not authorized");
+  assert(gates.member(gId), "Gate not found");
+  gates.insert(gId, pol);
+}
