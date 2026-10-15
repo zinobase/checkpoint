@@ -1,0 +1,52 @@
+name: checkpoint-ci
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: compact-toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/compact" update 0.35.0
+          "$HOME/.local/bin/compact" compile contract/src/checkpoint.compact /tmp/cp-zk
+          ls /tmp/cp-zk/keys
+          "$HOME/.local/bin/compact" compile --skip-zk contract/src/checkpoint.compact /tmp/cp-js
+          diff -r -x '*.map' /tmp/cp-js/contract contract/src/managed/checkpoint/contract
+      - name: suite
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run demo
+          npm run build:web
+      - name: stage-pages
+        if: github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  pages:
+    needs: verify
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.out.outputs.page_url }}
+    steps:
+      - id: out
+        uses: actions/deploy-pages@v4

@@ -384,13 +384,16 @@ body.bunker-shell {
 .enrol-grid-two,
 .policy-matrix {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
+  align-items: end;
 }
 
 .enrol-field {
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 0.22rem;
 }
 
@@ -402,6 +405,9 @@ body.bunker-shell {
 }
 
 .enrol-control {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   background-color: var(--bunker-recessed);
   border: 1px solid var(--grid-hairline);
   border-radius: 3px;
@@ -410,6 +416,7 @@ body.bunker-shell {
   font-size: 0.76rem;
   padding: 0.42rem 0.52rem;
   outline: none;
+  text-overflow: ellipsis;
 }
 
 .enrol-control:focus {

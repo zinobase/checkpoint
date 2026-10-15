@@ -145,7 +145,7 @@ function syncGateSelectorOptions(): void {
   for (const [code, spec] of store.gates.entries()) {
     const opt = document.createElement('option');
     opt.value = code;
-    opt.textContent = `${code} // ${spec.sectorLabel} (T>=${spec.minTier})`;
+    opt.textContent = `${code} (${spec.sectorLabel} / T>=${spec.minTier})`;
     selActiveGate.appendChild(opt);
   }
   if (prev && store.gates.has(prev)) {
@@ -161,7 +161,7 @@ function syncPolicyEditorFromSelectedGate(): void {
   polRefTime.value = String(spec.referenceTime);
   polReqActive.value = spec.requireActive ? 'true' : 'false';
   polCheckExpiry.value = spec.checkExpiry ? 'true' : 'false';
-  activeGateBanner.textContent = `SECTOR: ${spec.gateCode.toUpperCase()}`;
+  activeGateBanner.textContent = spec.gateCode.toUpperCase();
 }
 
 function syncRosterAndActiveCard(): void {
@@ -185,7 +185,7 @@ function syncRosterAndActiveCard(): void {
 
     const sub = document.createElement('span');
     sub.className = 'roster-leaf-preview';
-    sub.textContent = `Leaf 0x${item.commitmentHex.slice(0, 14)}...`;
+    sub.textContent = `0x${item.commitmentHex.slice(0, 14)}...`;
 
     left.appendChild(title);
     left.appendChild(sub);
@@ -211,12 +211,12 @@ function syncRosterAndActiveCard(): void {
     const st = store.getStanding(active.revocationTagHex);
     rosterActiveSlotLabel.textContent = `SLOT #${active.slotId}`;
     cardCallsign.textContent = active.callsign;
-    cardTierLabel.textContent = `TIER ${active.tier} // ${active.active ? 'ACTIVE' : 'INACTIVE'}`;
+    cardTierLabel.textContent = `TIER ${active.tier}`;
     cardCommitmentHex.textContent = `0x${active.commitmentHex.slice(0, 18)}...`;
     cardRevocationHex.textContent = `0x${active.revocationTagHex.slice(0, 18)}...`;
 
     standingLedBadge.dataset.standing = st;
-    standingLedBadge.textContent = `STANDING: ${st}`;
+    standingLedBadge.textContent = st;
 
     const leds = tierLedStrip.querySelectorAll<HTMLElement>('.tier-led');
     leds.forEach((led) => {
@@ -253,11 +253,11 @@ function syncTelemetryAndAudit(): void {
 
   const report = store.auditZeroLeakage();
   if (report.clean) {
-    leakAuditChip.textContent = '0 BYTES LEAKED';
-    telWitnessState.textContent = 'SK / SALT / TIER HIDDEN';
+    leakAuditChip.textContent = '0 LEAKED';
+    telWitnessState.textContent = 'HIDDEN';
   } else {
     leakAuditChip.textContent = `EXPOSED: ${report.exposedMarkers.join(',')}`;
-    telWitnessState.textContent = 'PRIVACY BREACH';
+    telWitnessState.textContent = 'BREACH';
   }
 }
 
@@ -276,18 +276,18 @@ async function evaluateTurnstileScan(): Promise<void> {
   scanBusy = true;
   piezoAudio.rfidScanPing();
   turnstileViewport.dataset.barrierState = 'proving';
-  solenoidBanner.textContent = `SYNTHESIZING ZK PROOF @ ${gateSpec.gateCode.toUpperCase()}...`;
+  solenoidBanner.textContent = `VERIFYING @ ${gateSpec.gateCode.toUpperCase()}...`;
   zkTraceLog.innerHTML = '';
 
   appendZkTrace(
-    `[SCAN] Badge ${badge.callsign} (Slot #${badge.slotId}) presented at ${gateSpec.gateCode}`,
+    `[SCAN] Badge ${badge.callsign} (#${badge.slotId}) -> ${gateSpec.gateCode}`,
     'warn',
   );
   await pauseMs(120);
 
   piezoAudio.circuitSweep();
   appendZkTrace(
-    `[C1/4] HistoricMerkleTree<16> inclusion check -> root 0x${store.tree.currentRootHex().slice(0, 16)}...`,
+    `[1/4] Merkle inclusion -> root 0x${store.tree.currentRootHex().slice(0, 16)}...`,
     'ok',
   );
   await pauseMs(140);
@@ -299,7 +299,7 @@ async function evaluateTurnstileScan(): Promise<void> {
   const policyPassed = orgOk && tierOk && activeOk && expiryOk;
 
   appendZkTrace(
-    `[C2/4] satisfiesGate: Tier ${badge.tier}>=${gateSpec.minTier} (${tierOk ? 'OK' : 'FAIL'}) | Active (${activeOk ? 'OK' : 'FAIL'}) | Expiry ${badge.expiresAt}>${gateSpec.referenceTime} (${expiryOk ? 'OK' : 'FAIL'})`,
+    `[2/4] Policy: Tier ${badge.tier}>=${gateSpec.minTier} (${tierOk ? 'OK' : 'FAIL'}) | Active (${activeOk ? 'OK' : 'FAIL'}) | Expiry (${expiryOk ? 'OK' : 'FAIL'})`,
     policyPassed ? 'ok' : 'deny',
   );
   await pauseMs(140);
@@ -307,15 +307,15 @@ async function evaluateTurnstileScan(): Promise<void> {
   const nowTimeStr = new Date().toTimeString().split(' ')[0];
 
   if (!policyPassed) {
-    let reason = 'POLICY CONSTRAINT FAILED';
-    if (!tierOk) reason = `INSUFFICIENT TIER (${badge.tier} < ${gateSpec.minTier})`;
-    else if (!activeOk) reason = 'CREDENTIAL INACTIVE';
-    else if (!expiryOk) reason = 'CREDENTIAL EXPIRED';
+    let reason = 'POLICY FAILED';
+    if (!tierOk) reason = `TIER ${badge.tier} < ${gateSpec.minTier}`;
+    else if (!activeOk) reason = 'INACTIVE';
+    else if (!expiryOk) reason = 'EXPIRED';
 
-    appendZkTrace(`[REJECT] Circuit assert failed: ${reason}`, 'deny');
+    appendZkTrace(`[REJECT] ${reason}`, 'deny');
     turnstileViewport.dataset.barrierState = 'denied';
-    solenoidBanner.textContent = `LOCKDOWN // ${reason}`;
-    scopedPassReadout.textContent = 'SCOPED PASS: REJECTED';
+    solenoidBanner.textContent = `DENIED // ${reason}`;
+    scopedPassReadout.textContent = 'REJECTED';
     piezoAudio.denyLockdownBuzz();
 
     store.recordPassage({
@@ -333,16 +333,16 @@ async function evaluateTurnstileScan(): Promise<void> {
 
   const standing = store.getStanding(badge.revocationTagHex);
   appendZkTrace(
-    `[C3/4] Revocation map lookup (0x${badge.revocationTagHex.slice(0, 14)}...) -> ${standing}`,
+    `[3/4] Revocation check (0x${badge.revocationTagHex.slice(0, 14)}...) -> ${standing}`,
     standing === 'VALID' ? 'ok' : 'deny',
   );
   await pauseMs(130);
 
   if (standing !== 'VALID') {
-    appendZkTrace(`[REJECT] Credential standing is ${standing} on public ledger`, 'deny');
+    appendZkTrace(`[REJECT] Standing is ${standing}`, 'deny');
     turnstileViewport.dataset.barrierState = 'denied';
-    solenoidBanner.textContent = `LOCKDOWN // CREDENTIAL ${standing}`;
-    scopedPassReadout.textContent = `SCOPED PASS: BARRED (${standing})`;
+    solenoidBanner.textContent = `DENIED // ${standing}`;
+    scopedPassReadout.textContent = `BARRED (${standing})`;
     piezoAudio.denyLockdownBuzz();
 
     store.recordPassage({
@@ -363,15 +363,15 @@ async function evaluateTurnstileScan(): Promise<void> {
   const nullifierHex = encodeHex(nullifierBytes);
 
   appendZkTrace(
-    `[C4/4] Disclosed gatePassFor('${gateSpec.gateCode}', sk) -> 0x${nullifierHex.slice(0, 22)}...`,
+    `[4/4] Nullifier('${gateSpec.gateCode}') -> 0x${nullifierHex.slice(0, 22)}...`,
     'ok',
   );
 
   rotorAngleDeg += 120;
   svgTurnstileRotor.style.transform = `rotate3d(0, 0, 1, ${rotorAngleDeg}deg)`;
   turnstileViewport.dataset.barrierState = 'granted';
-  solenoidBanner.textContent = 'SOLENOID UNLOCKED // ROTOR INDEXED +120 DEG';
-  scopedPassReadout.textContent = `PASS: 0x${nullifierHex.slice(0, 20)}...`;
+  solenoidBanner.textContent = 'UNLOCKED (+120°)';
+  scopedPassReadout.textContent = `0x${nullifierHex.slice(0, 16)}...`;
   piezoAudio.grantPiezoChirp();
 
   store.recordPassage({
@@ -394,14 +394,14 @@ function mutateActiveStanding(target: StandingFlag): void {
   if (target === 'VALID') {
     piezoAudio.grantPiezoChirp();
     turnstileViewport.dataset.barrierState = 'locked';
-    solenoidBanner.textContent = `STANDING RESTORED FOR ${active.callsign}`;
+    solenoidBanner.textContent = `${active.callsign}: VALID`;
   } else {
     piezoAudio.denyLockdownBuzz();
     turnstileViewport.dataset.barrierState = 'denied';
-    solenoidBanner.textContent = `${active.callsign} MARKED ${target}`;
+    solenoidBanner.textContent = `${active.callsign}: ${target}`;
   }
   appendZkTrace(
-    `[LEDGER] Authority updated revocation tag 0x${active.revocationTagHex.slice(0, 14)}... -> ${target}`,
+    `[LEDGER] 0x${active.revocationTagHex.slice(0, 14)}... -> ${target}`,
     target === 'VALID' ? 'ok' : 'deny',
   );
   syncAllPanels();
@@ -415,7 +415,7 @@ function highlightScenarioButton(activeBtn: HTMLButtonElement): void {
 // Event Listeners
 btnPiezoToggle.addEventListener('click', () => {
   const armed = piezoAudio.flipPower();
-  btnPiezoToggle.textContent = `PIEZO AUDIO: ${armed ? 'ARMED' : 'MUTED'}`;
+  btnPiezoToggle.textContent = `AUDIO: ${armed ? 'ON' : 'OFF'}`;
   btnPiezoToggle.classList.toggle('armed', armed);
 });
 
@@ -468,7 +468,7 @@ btnEnrollCredential.addEventListener('click', async () => {
 
   const enrolled = await createAndEnrollOperator(callsign, tier, active, expiresAt);
   appendZkTrace(
-    `[ISSUE] Appended leaf #${enrolled.slotId} (${enrolled.callsign}) -> 0x${enrolled.commitmentHex.slice(0, 16)}...`,
+    `[ISSUE] #${enrolled.slotId} (${enrolled.callsign}) -> 0x${enrolled.commitmentHex.slice(0, 16)}...`,
     'ok',
   );
   piezoAudio.grantPiezoChirp();
@@ -502,7 +502,7 @@ btnApplyGatePolicy.addEventListener('click', () => {
   };
   store.upsertGate(updated);
   appendZkTrace(
-    `[POLICY] Updated ${updated.gateCode}: minTier=${updated.minTier}, active=${updated.requireActive}, refTime=${updated.referenceTime}`,
+    `[POLICY] ${updated.gateCode}: T>=${updated.minTier}, active=${updated.requireActive}, t=${updated.referenceTime}`,
     'warn',
   );
   syncGateSelectorOptions();
@@ -513,7 +513,7 @@ btnApplyGatePolicy.addEventListener('click', () => {
 async function executeLiveContractRun(): Promise<void> {
   btnExecCompiledContract.disabled = true;
   wasmContractOutput.textContent = '';
-  contractRunState.textContent = 'RUNNING CIRCUITS';
+  contractRunState.textContent = 'RUNNING';
   const startedAt = performance.now();
 
   try {
@@ -523,7 +523,7 @@ async function executeLiveContractRun(): Promise<void> {
     });
     document.body.dataset.gate = 'completed';
     const elapsedMs = Math.round(performance.now() - startedAt);
-    contractRunState.textContent = `VERIFIED (${elapsedMs} MS)`;
+    contractRunState.textContent = `OK (${elapsedMs} ms)`;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     wasmContractOutput.textContent += `\nCircuit error: ${msg}`;
@@ -547,7 +547,7 @@ btnExecCompiledContract.addEventListener('click', () => {
 
   store.upsertGate({
     gateCode: 'gate-alpha',
-    sectorLabel: 'PERIMETER CHECKPOINT ALPHA',
+    sectorLabel: 'ALPHA',
     orgIdHex: store.orgIdHex,
     minTier: 2,
     requireActive: true,
@@ -557,7 +557,7 @@ btnExecCompiledContract.addEventListener('click', () => {
 
   store.upsertGate({
     gateCode: 'gate-vault-sec',
-    sectorLabel: 'CRYO VAULT ENCLAVE',
+    sectorLabel: 'VAULT',
     orgIdHex: store.orgIdHex,
     minTier: 3,
     requireActive: true,
@@ -567,7 +567,7 @@ btnExecCompiledContract.addEventListener('click', () => {
 
   store.upsertGate({
     gateCode: 'gate-scif-core',
-    sectorLabel: 'DIRECTORATE SCIF CORE',
+    sectorLabel: 'CORE',
     orgIdHex: store.orgIdHex,
     minTier: 4,
     requireActive: true,
@@ -580,17 +580,17 @@ btnExecCompiledContract.addEventListener('click', () => {
   store.activeSlotId = 0;
 
   store.recordPassage({
-    timestampStr: 'BOOT-INIT',
+    timestampStr: 'BOOT',
     epochSec: 1000,
     gateCode: 'gate-alpha',
     passNullifierHex: encodeHex(randomSecret32()),
     outcome: 'GRANTED',
-    detail: 'INITIAL CALIBRATION',
+    detail: 'INIT',
   });
 
   syncGateSelectorOptions();
   syncAllPanels();
-  appendZkTrace('[READY] Turnstile optical sensors calibrated. Present RFID badge to synthesize proof.', 'ok');
+  appendZkTrace('[READY] Scan badge to verify access.', 'ok');
 
   if (location.hash === '#probe') {
     void executeLiveContractRun();
